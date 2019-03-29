@@ -89,7 +89,7 @@
     return `${partialToken}.${signatureAsBase64}`;
   };
 
-  const dpopBinding = async (uri) => jwt({ typ: 'dpop_binding+jwt', alg: 'ES256' }, { http_uri: uri, http_method: 'POST', jwk: await toJWK(publicKey) });
+  const dpopBinding = async (uri) => jwt({ typ: 'dpop_binding+jwt', alg: 'ES256', jwk: await toJWK(publicKey) }, { http_uri: uri, http_method: 'POST' });
   const dpopProof = (uri, method) => jwt({ typ: 'dpop_proof+jwt', alg: 'ES256' }, { http_uri: uri, http_method: method });
 
   // AS Discovery
@@ -153,41 +153,41 @@
 
   append(`stored token response: ${JSON.stringify(tokens, null, 4)}`);
 
-  const userinfoRequestBody = new URLSearchParams();
-  userinfoRequestBody.append('access_token', tokens.access_token);
-  userinfoRequestBody.append('dpop_proof', await dpopProof(userinfo_endpoint, 'POST'));
+  const introspectionRequestBody = new URLSearchParams();
+  introspectionRequestBody.append('token', tokens.access_token);
+  introspectionRequestBody.append('client_id', 'dpop-heroku');
+  introspectionRequestBody.append('dpop_proof', await dpopProof(introspection_endpoint, 'POST'));
 
-  const userinfoResponse = await fetch(userinfo_endpoint, {
+  const introspectionResponse = await fetch(introspection_endpoint, {
     method: 'POST',
     headers: {
       'content-type': 'application/x-www-form-urlencoded',
     },
-    body: userinfoRequestBody.toString(),
+    body: introspectionRequestBody.toString(),
   });
 
-  const userinfo = await userinfoResponse.json();
-  if (userinfo.sub) {
-    append('\ncan you do this?');
-    append(`curl ${userinfo_endpoint} -H 'Authorization: Bearer ${tokens.access_token}'`);
-    append(`\ndidn't think so, i can, kinda`);
-    append(`\nuserinfo response: ${JSON.stringify(userinfo)}`);
+  const introspection = await introspectionResponse.json();
 
-    const introspectionRequestBody = new URLSearchParams();
-    introspectionRequestBody.append('token', tokens.access_token);
-    introspectionRequestBody.append('client_id', 'dpop-heroku');
-    introspectionRequestBody.append('dpop_proof', await dpopProof(introspection_endpoint, 'POST'));
+  append(`\nintrospection response: ${JSON.stringify(introspection, null, 4)}`);
 
-    const introspectionResponse = await fetch(introspection_endpoint, {
+  if (introspection.active) {
+    const userinfoRequestBody = new URLSearchParams();
+    userinfoRequestBody.append('access_token', tokens.access_token);
+    userinfoRequestBody.append('dpop_proof', await dpopProof(userinfo_endpoint, 'POST'));
+
+    const userinfoResponse = await fetch(userinfo_endpoint, {
       method: 'POST',
       headers: {
         'content-type': 'application/x-www-form-urlencoded',
       },
-      body: introspectionRequestBody.toString(),
+      body: userinfoRequestBody.toString(),
     });
 
-    const introspection = await introspectionResponse.json();
-
-    append(`\nintrospection response: ${JSON.stringify(introspection, null, 4)}`);
+    const userinfo = await userinfoResponse.json();
+    append('\ncan you do this?');
+    append(`curl ${userinfo_endpoint} -H 'Authorization: Bearer ${tokens.access_token}'`);
+    append(`\ndidn't think so, i can, kinda`);
+    append(`\nuserinfo response: ${JSON.stringify(userinfo)}`);
 
     append(`\nAnd the best part, i can't even tell you what the private key is.`);
   }
