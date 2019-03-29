@@ -152,9 +152,6 @@
   }
 
   append(`stored token response: ${JSON.stringify(tokens, null, 4)}`);
-  append('\ncan you do this?');
-  append(`curl ${userinfo_endpoint} -H 'Authorization: Bearer ${tokens.access_token}'`);
-  append(`\ndidn't think so, i can, kinda`);
 
   const userinfoRequestBody = new URLSearchParams();
   userinfoRequestBody.append('access_token', tokens.access_token);
@@ -169,27 +166,31 @@
   });
 
   const userinfo = await userinfoResponse.json();
+  if (userinfo.sub) {
+    append('\ncan you do this?');
+    append(`curl ${userinfo_endpoint} -H 'Authorization: Bearer ${tokens.access_token}'`);
+    append(`\ndidn't think so, i can, kinda`);
+    append(`\nuserinfo response: ${JSON.stringify(userinfo)}`);
 
-  append(`\nuserinfo response: ${JSON.stringify(userinfo)}`);
+    const introspectionRequestBody = new URLSearchParams();
+    introspectionRequestBody.append('token', tokens.access_token);
+    introspectionRequestBody.append('client_id', 'dpop-heroku');
+    introspectionRequestBody.append('dpop_proof', await dpopProof(introspection_endpoint, 'POST'));
 
-  const introspectionRequestBody = new URLSearchParams();
-  introspectionRequestBody.append('token', tokens.access_token);
-  introspectionRequestBody.append('client_id', 'dpop-heroku');
-  introspectionRequestBody.append('dpop_proof', await dpopProof(introspection_endpoint, 'POST'));
+    const introspectionResponse = await fetch(introspection_endpoint, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body: introspectionRequestBody.toString(),
+    });
 
-  const introspectionResponse = await fetch(introspection_endpoint, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/x-www-form-urlencoded',
-    },
-    body: introspectionRequestBody.toString(),
-  });
+    const introspection = await introspectionResponse.json();
 
-  const introspection = await introspectionResponse.json();
+    append(`\nintrospection response: ${JSON.stringify(introspection, null, 4)}`);
 
-  append(`\nintrospection response: ${JSON.stringify(introspection, null, 4)}`);
-
-  append(`\nAnd the best part, i can't even tell you what the private key is.`);
+    append(`\nAnd the best part, i can't even tell you what the private key is.`);
+  }
 
   window.refresh = async () => {
     const refreshRequestBody = new URLSearchParams();
