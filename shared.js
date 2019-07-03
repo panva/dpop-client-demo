@@ -62,7 +62,7 @@
   }
 
   const jwt = async (header, payload) => {
-    payload.exp = epoch() + 30
+    payload.iat = epoch()
     payload.jti = nanoid()
 
     const payloadAsJSON = JSON.stringify(payload);
@@ -89,13 +89,12 @@
     return `${partialToken}.${signatureAsBase64}`;
   };
 
-  const dpopBinding = async (uri) => jwt({ typ: 'dpop_binding+jwt', alg: 'ES256', jwk: await toJWK(publicKey) }, { http_uri: uri, http_method: 'POST' });
-  const dpopProof = (uri, method) => jwt({ typ: 'dpop_proof+jwt', alg: 'ES256' }, { http_uri: uri, http_method: method });
+  const dpopToken = async (uri, method = 'POST') => jwt({ typ: 'dpop+jwt', alg: 'ES256', jwk: await toJWK(publicKey) }, { http_uri: uri, http_method: method });
 
   // AS Discovery
   let introspection_endpoint, token_endpoint, userinfo_endpoint
   await (async () => {
-    const response = await fetch('https://draft-fett-oauth-dpop-00.herokuapp.com/.well-known/openid-configuration');
+    const response = await fetch('https://op.panva.cz/.well-known/openid-configuration');
     ({ introspection_endpoint, token_endpoint, userinfo_endpoint } = await response.json());
   })();
 
@@ -125,13 +124,13 @@
     tokenRequestBody.append('grant_type', 'authorization_code');
     tokenRequestBody.append('code', code);
     tokenRequestBody.append('client_id', 'dpop-heroku');
-    tokenRequestBody.append('dpop_binding', await dpopBinding(token_endpoint));
 
     const tokenResponse = await fetch(token_endpoint, {
       method: 'POST',
-      headers: {
+      headers: new Headers({
         'content-type': 'application/x-www-form-urlencoded',
-      },
+        'DPoP': await dpopToken(token_endpoint),
+      }),
       body: tokenRequestBody.toString(),
     });
 
@@ -153,40 +152,38 @@
 
   append(`stored token response: ${JSON.stringify(tokens, null, 4)}`);
 
-  const introspectionRequestBody = new URLSearchParams();
-  introspectionRequestBody.append('token', tokens.access_token);
-  introspectionRequestBody.append('client_id', 'dpop-heroku');
-  introspectionRequestBody.append('dpop_proof', await dpopProof(introspection_endpoint, 'POST'));
+  let introspection;
+  for (const type of ['refresh_token', 'access_token']) {
+    const introspectionRequestBody = new URLSearchParams();
+    introspectionRequestBody.append('token', tokens[type]);
+    introspectionRequestBody.append('client_id', 'dpop-heroku');
+    introspectionRequestBody.append('token_type_hint', type);
 
-  const introspectionResponse = await fetch(introspection_endpoint, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/x-www-form-urlencoded',
-    },
-    body: introspectionRequestBody.toString(),
-  });
+    const introspectionResponse = await fetch(introspection_endpoint, {
+      method: 'POST',
+      headers: new Headers({
+        'content-type': 'application/x-www-form-urlencoded',
+      }),
+      body: introspectionRequestBody.toString(),
+    });
 
-  const introspection = await introspectionResponse.json();
+    introspection = await introspectionResponse.json();
+    append(`\n${type} introspection response: ${JSON.stringify(introspection, null, 4)}`);
+  }
 
-  append(`\nintrospection response: ${JSON.stringify(introspection, null, 4)}`);
 
   if (introspection.active) {
-    const userinfoRequestBody = new URLSearchParams();
-    userinfoRequestBody.append('access_token', tokens.access_token);
-    userinfoRequestBody.append('dpop_proof', await dpopProof(userinfo_endpoint, 'POST'));
-
     const userinfoResponse = await fetch(userinfo_endpoint, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/x-www-form-urlencoded',
-      },
-      body: userinfoRequestBody.toString(),
+      method: 'GET',
+      headers: new Headers({
+        'DPoP': await dpopToken(userinfo_endpoint, 'GET'),
+        'Authorization': `DPoP ${tokens.access_token}`
+      })
     });
 
     const userinfo = await userinfoResponse.json();
-    append('\ncan you do this?');
-    append(`curl ${userinfo_endpoint} -H 'Authorization: Bearer ${tokens.access_token}'`);
-    append(`\ndidn't think so, i can, kinda`);
+    append('\ncan you use the access or refresh tokens? Nope, only those with access to this javascript runtime context can.');
+
     append(`\nuserinfo response: ${JSON.stringify(userinfo)}`);
 
     append(`\nAnd the best part, i can't even tell you what the private key is.`);
@@ -197,13 +194,13 @@
     refreshRequestBody.append('grant_type', 'refresh_token');
     refreshRequestBody.append('refresh_token', tokens.refresh_token);
     refreshRequestBody.append('client_id', 'dpop-heroku');
-    refreshRequestBody.append('dpop_proof', await dpopProof(token_endpoint, 'POST'));
 
     const refreshResponse = await fetch(token_endpoint, {
       method: 'POST',
-      headers: {
+      headers: new Headers({
+        'DPoP': await dpopToken(token_endpoint),
         'content-type': 'application/x-www-form-urlencoded',
-      },
+      }),
       body: refreshRequestBody.toString(),
     });
 
