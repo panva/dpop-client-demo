@@ -89,7 +89,7 @@
     return `${partialToken}.${signatureAsBase64}`;
   };
 
-  const dpopToken = async (uri, method = 'POST') => jwt({ typ: 'dpop+jwt', alg: 'ES256', jwk: await toJWK(publicKey) }, { http_uri: uri, http_method: method });
+  const dpopToken = async (uri, method = 'POST') => jwt({ typ: 'dpop+jwt', alg: 'ES256', jwk: await toJWK(publicKey) }, { htu: uri, htm: method });
 
   // AS Discovery
   let introspection_endpoint, token_endpoint, userinfo_endpoint
