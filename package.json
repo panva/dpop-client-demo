@@ -9,6 +9,6 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "http-server": "^0.11.1"
+    "serve": "^11.3.0"
   }
 }
